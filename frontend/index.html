@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SwiftCache Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>SwiftCache</h1>
+      <p class="tag">Web Proxy + LRU Cache — demo</p>
+    </header>
+
+    <section class="controls">
+      <input id="urlInput" type="text" placeholder="Enter URL e.g. http://example.com" />
+      <button id="fetchBtn">Fetch</button>
+      <span id="statusMsg"></span>
+    </section>
+
+    <section class="panels">
+      <div class="panel">
+        <h3>Cache Stats</h3>
+        <pre id="statsArea">loading...</pre>
+      </div>
+
+      <div class="panel">
+        <h3>Cache Contents (MRU → LRU)</h3>
+        <table id="cacheTable">
+          <thead><tr><th>URL</th><th>Size (bytes)</th><th>Created</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="responsePanel">
+      <h3>Last Response</h3>
+      <div id="responseMeta"></div>
+      <pre id="responseBody"></pre>
+    </section>
+
+    <footer>
+      <small>Auto-refresh every 2s · Backend: http://localhost:8000</small>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
