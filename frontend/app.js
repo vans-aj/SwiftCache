@@ -27,8 +27,15 @@ async function refreshCache() {
 }
 
 async function fetchUrl() {
-  const url = urlInput.value.trim();
+  let url = urlInput.value.trim();
   if (!url) { alert("Enter a URL"); return; }
+
+  // --- auto-prepend scheme if missing ---
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = "http://" + url;
+  }
+  // ---------------------------------------
+
   statusMsg.innerText = "Fetching...";
   fetchBtn.disabled = true;
   try {
