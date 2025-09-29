@@ -1,10 +1,12 @@
 <!doctype html>
 <html>
+
 <head>
   <meta charset="utf-8" />
   <title>SwiftCache Dashboard</title>
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <div class="container">
     <header>
@@ -27,7 +29,13 @@
       <div class="panel">
         <h3>Cache Contents (MRU → LRU)</h3>
         <table id="cacheTable">
-          <thead><tr><th>URL</th><th>Size (bytes)</th><th>Created</th></tr></thead>
+          <thead>
+            <tr>
+              <th>URL</th>
+              <th>Size (bytes)</th>
+              <th>Created</th>
+            </tr>
+          </thead>
           <tbody></tbody>
         </table>
       </div>
@@ -38,7 +46,45 @@
       <div id="responseMeta"></div>
       <pre id="responseBody"></pre>
     </section>
+    <section>
+      <h2>Blocklist Management</h2>
+      <div>
+        <input type="text" id="blockDomain" placeholder="Enter domain to block" />
+        <button onclick="addToBlocklist()">Add</button>
+      </div>
 
+      <ul id="blocklist"></ul>
+    </section>
+
+    <section class="panel" id="experimentPanel">
+      <h3>Concurrency Experiment</h3>
+
+      <div class="experiment-controls">
+        <input id="expUrl" type="text" placeholder="Enter URL e.g. example.com or http://example.com" />
+        <input id="expClients" type="number" min="1" value="5" style="width:80px" />
+        <button id="runExpBtn">Run Experiment</button>
+        <span id="expStatus"></span>
+      </div>
+
+      <div id="expSummary" class="exp-summary">No experiment run yet.</div>
+
+      <div id="expViz" class="exp-viz">
+        <div id="expTimeline" class="timeline"></div>
+        <table id="expTable" class="exp-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Start (ms)</th>
+              <th>Duration (ms)</th>
+              <th>Performed Fetch</th>
+              <th>Waited</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
     <footer>
       <small>Auto-refresh every 2s · Backend: http://localhost:8000</small>
     </footer>
@@ -46,4 +92,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>

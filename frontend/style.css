@@ -20,3 +20,20 @@ header h1 { margin:0; }
 .responsePanel { margin-top:18px; background:white; padding:12px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
 #responseBody { max-height:240px; overflow:auto; background:#f4f6f8; padding:8px; border-radius:4px; }
 footer { margin-top:12px; color:#666; font-size:0.9rem; }
+
+/* Experiment visualization styles */
+.exp-summary { margin-top:10px; font-size:0.95rem; color:#222; }
+.exp-viz { margin-top:12px; }
+.timeline { background:#fff; padding:8px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,0.06); margin-bottom:10px; }
+.timeline-row { display:flex; align-items:center; gap:8px; margin:6px 0; }
+.timeline-label { width:60px; font-size:0.9rem; color:#333; }
+.timeline-bar-wrap { flex:1; background:#f4f6f8; height:28px; border-radius:6px; position:relative; overflow:hidden; }
+.timeline-bar { height:100%; border-radius:6px; position:absolute; left:0; top:0; }
+.timeline-bar.fetcher { background: linear-gradient(90deg,#2b8fe8,#2b8fe8); box-shadow:0 2px 6px rgba(43,143,232,0.18); }
+.timeline-bar.waiter { background: repeating-linear-gradient(45deg, #f39c12, #f39c12 6px, #ffd89b 6px, #ffd89b 12px); opacity:0.9; }
+.timeline-bar.hit { background: linear-gradient(90deg,#2ecc71,#27ae60); }
+.timeline-info { width:160px; font-size:0.85rem; color:#444; text-align:right; }
+
+.exp-table { width:100%; border-collapse:collapse; margin-top:8px; background:#fff; border-radius:6px; overflow:hidden; }
+.exp-table th, .exp-table td { padding:8px 10px; border-bottom:1px solid #eee; text-align:left; font-size:0.9rem; }
+.exp-table tr.fetcher-row td { background: #f0f8ff; } /* highlight fetcher row */
