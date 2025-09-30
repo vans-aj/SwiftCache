@@ -128,5 +128,28 @@ def experiment_route():
     results_sorted = sorted([r for r in results if "id" in r and r["id"] != -1], key=lambda x: x["id"])
     return jsonify({"results": results_sorted, "summary": summary})
 
+from scheduler.algorithms import fcfs, sjf, round_robin
+
+@app.route("/schedule", methods=["POST"])
+def schedule_route():
+    data = request.get_json() or {}
+    algo = data.get("algorithm", "fcfs")
+    processes = data.get("processes", [])
+
+    if not processes:
+        return jsonify({"error": "no processes provided"}), 400
+
+    if algo == "fcfs":
+        timeline = fcfs(processes)
+    elif algo == "sjf":
+        timeline = sjf(processes)
+    elif algo == "rr":
+        quantum = data.get("quantum", 2)
+        timeline = round_robin(processes, quantum)
+    else:
+        return jsonify({"error": "unknown algorithm"}), 400
+
+    return jsonify({"timeline": timeline})
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)

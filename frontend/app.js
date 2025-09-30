@@ -98,8 +98,20 @@ function renderExperimentResults(data) {
     const leftPct = ((r.start_ms - minStart) / totalSpan) * 100;
     const widthPct = ((r.duration_ms) / totalSpan) * 100;
     bar.className = "timeline-bar";
-    bar.style.left = `${leftPct}%`;
-    bar.style.width = `${Math.max(1, widthPct)}%`; // ensure visible
+
+    // If duration is essentially zero, force a visible tick (px width)
+    const isTiny = (typeof r.duration_ms === "number" && r.duration_ms <= 1);
+    if (isTiny) {
+      // use pixel width for tiny hits so they are visible
+      bar.classList.add("tick");
+      bar.style.left = `${leftPct}%`;
+      // width forced by CSS .tick (8px)
+      bar.style.width = null;
+    } else {
+      // normal proportional width
+      bar.style.left = `${leftPct}%`;
+      bar.style.width = `${Math.max(1, widthPct)}%`; // ensure visible for very small non-zero durations
+    }
 
     // choose style
     if (r.performed_fetch) {
@@ -108,6 +120,7 @@ function renderExperimentResults(data) {
       bar.classList.add("waiter");
     } else {
       bar.classList.add("hit");
+      if (isTiny) bar.classList.add("tick");
     }
 
     // tooltip text inside bar (optional)
@@ -235,6 +248,46 @@ async function removeFromBlocklist(domain) {
   });
   loadBlocklist();
 }
+const runSchedBtn = document.getElementById("runSchedBtn");
+const algoSelect = document.getElementById("algoSelect");
+const quantumInput = document.getElementById("quantumInput");
+const schedOutput = document.getElementById("schedOutput");
+const schedTimeline = document.getElementById("schedTimeline");
+
+runSchedBtn.onclick = async () => {
+  const algo = algoSelect.value;
+  const quantum = parseInt(quantumInput.value, 10) || 2;
+
+  // sample processes for demo
+  const processes = [
+    {id: "P1", arrival: 0, burst: 5},
+    {id: "P2", arrival: 1, burst: 3},
+    {id: "P3", arrival: 2, burst: 8}
+  ];
+
+  const res = await fetch(`${API_BASE}/schedule`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({algorithm: algo, processes, quantum})
+  });
+  const j = await res.json();
+  schedOutput.innerText = JSON.stringify(j, null, 2);
+
+  // Draw Gantt-like chart
+  schedTimeline.innerHTML = "";
+  const tl = j.timeline || [];
+  tl.forEach(seg => {
+    const div = document.createElement("div");
+    div.style.display = "inline-block";
+    div.style.padding = "6px 10px";
+    div.style.marginRight = "2px";
+    div.style.background = "#2b8fe8";
+    div.style.color = "white";
+    div.style.borderRadius = "4px";
+    div.innerText = `${seg.id} [${seg.start}-${seg.end}]`;
+    schedTimeline.appendChild(div);
+  });
+};
 
 // Call on page load
 loadBlocklist();

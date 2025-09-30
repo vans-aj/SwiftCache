@@ -85,6 +85,20 @@
         </table>
       </div>
     </section>
+    <div class="panel">
+      <h3>Process Scheduling</h3>
+      <label>Algorithm:</label>
+      <select id="algoSelect">
+        <option value="fcfs">FCFS</option>
+        <option value="sjf">SJF</option>
+        <option value="rr">Round Robin</option>
+      </select>
+      <input id="quantumInput" placeholder="Quantum (for RR)" style="width:120px;">
+      <button id="runSchedBtn">Run Scheduler</button>
+
+      <pre id="schedOutput"></pre>
+      <div id="schedTimeline"></div>
+    </div>
     <footer>
       <small>Auto-refresh every 2s · Backend: http://localhost:8000</small>
     </footer>
