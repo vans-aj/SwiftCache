@@ -1,110 +1,602 @@
-<!doctype html>
-<html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>SwiftCache Dashboard</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftCache Dashboard</title>
+    <!-- We'll use a simple charting library to draw our Gantt chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        header {
+            text-align: center;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 20px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            color: #2c3e50;
+        }
+
+        header p {
+            color: #7f8c8d;
+        }
+
+        .card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #34495e;
+            border-bottom: 1px solid #ecf0f1;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            margin-top: 0;
+            color: #34495e;
+            font-size: 1.2em;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            background-color: #3498db;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .status-message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            /* Now an empty block by default */
+            display: none; 
+        }
+        .status-message.info { display: block; background-color: #eaf2f8; border: 1px solid #aed6f1; color: #3498db; }
+        .status-message.success { display: block; background-color: #e8f8f5; border: 1px solid #a3e4d7; color: #1abc9c; }
+        .status-message.error { display: block; background-color: #fdedec; border: 1px solid #fadbd8; color: #e74c3c; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            background-color: #f8f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .stat-item h4 {
+            margin: 0 0 10px 0;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        .stat-item div {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        progress {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .table-container {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ecf0f1;
+            border-radius: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        thead th {
+            background-color: #f8f9f9;
+            position: sticky;
+            top: 0;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #fdfefe;
+        }
+
+        /* Scheduler styles */
+        .scheduler-controls {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        .process-inputs, .algo-selection {
+            flex: 1;
+            min-width: 300px;
+        }
+        .process-entry {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .process-entry label {
+            font-weight: bold;
+            min-width: 30px;
+        }
+        .remove-process-btn {
+            background-color: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            padding: 0;
+            line-height: 25px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .remove-process-btn:hover {
+            background-color: #c0392b;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .radio-group label {
+            cursor: pointer;
+        }
+
+        #quantum-container {
+            align-items: center;
+        }
+        #quantum-container.hidden {
+            display: none;
+        }
+        .gantt-container {
+            margin-top: 30px;
+            position: relative;
+            height: 300px;
+        }
+        #schedule-summary {
+            margin-top: 15px;
+            font-weight: bold;
+            text-align: center;
+        }
+    </style>
 </head>
-
 <body>
-  <div class="container">
-    <header>
-      <h1>SwiftCache</h1>
-      <p class="tag">Web Proxy + LRU Cache — demo</p>
-    </header>
+    <div class="container">
+        <header>
+            <h1>SwiftCache Dashboard</h1>
+            <p>A Multithreaded Proxy Server with LRU Cache and Request Scheduling</p>
+        </header>
 
-    <section class="controls">
-      <input id="urlInput" type="text" placeholder="Enter URL e.g. http://example.com" />
-      <button id="fetchBtn">Fetch</button>
-      <span id="statusMsg"></span>
-    </section>
+        <main>
+            <!-- Proxy Fetch Section -->
+            <section class="card">
+                <h2>Proxy Fetcher</h2>
+                <div class="input-group">
+                    <input type="text" id="url-input" placeholder="Enter a URL to fetch (e.g., http://info.cern.ch)">
+                    <button id="fetch-btn">Fetch URL</button>
+                </div>
+                <div id="fetch-status" class="status-message"></div>
+            </section>
 
-    <section class="panels">
-      <div class="panel">
-        <h3>Cache Stats</h3>
-        <pre id="statsArea">loading...</pre>
-      </div>
+            <!-- CPU Scheduler Section -->
+            <section class="card">
+                <h2>CPU Scheduler Simulation</h2>
+                <p>Select an algorithm to see how processes are scheduled. This also sets the live request scheduling policy for the proxy.</p>
+                <div class="scheduler-controls">
+                    <div class="process-inputs">
+                        <h3>Define Processes</h3>
+                        <div id="process-list">
+                            <!-- Processes will be added here dynamically -->
+                        </div>
+                        <button id="add-process-btn">+ Add Process</button>
+                    </div>
+                    <div class="algo-selection">
+                        <h3>Select Algorithm</h3>
+                        <div class="radio-group">
+                            <label><input type="radio" name="algorithm" value="fcfs" checked> First-Come, First-Served (FCFS)</label>
+                            <label><input type="radio" name="algorithm" value="sjf"> Shortest Job First (SJF)</label>
+                            <label><input type="radio" name="algorithm" value="rr"> Round Robin (RR)</label>
+                        </div>
+                        <div id="quantum-container" class="input-group hidden">
+                            <label for="quantum-input">Quantum:</label>
+                            <input type="number" id="quantum-input" value="2" min="1">
+                        </div>
+                        <button id="run-schedule-btn">Run Simulation</button>
+                    </div>
+                </div>
+                <div class="gantt-container">
+                    <h3>Execution Timeline (Gantt Chart)</h3>
+                    <canvas id="gantt-chart"></canvas>
+                    <div id="schedule-summary"></div>
+                </div>
+            </section>
 
-      <div class="panel">
-        <h3>Cache Contents (MRU → LRU)</h3>
-        <table id="cacheTable">
-          <thead>
-            <tr>
-              <th>URL</th>
-              <th>Size (bytes)</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="responsePanel">
-      <h3>Last Response</h3>
-      <div id="responseMeta"></div>
-      <pre id="responseBody"></pre>
-    </section>
-    <section>
-      <h2>Blocklist Management</h2>
-      <div>
-        <input type="text" id="blockDomain" placeholder="Enter domain to block" />
-        <button onclick="addToBlocklist()">Add</button>
-      </div>
-
-      <ul id="blocklist"></ul>
-    </section>
-
-    <section class="panel" id="experimentPanel">
-      <h3>Concurrency Experiment</h3>
-
-      <div class="experiment-controls">
-        <input id="expUrl" type="text" placeholder="Enter URL e.g. example.com or http://example.com" />
-        <input id="expClients" type="number" min="1" value="5" style="width:80px" />
-        <button id="runExpBtn">Run Experiment</button>
-        <span id="expStatus"></span>
-      </div>
-
-      <div id="expSummary" class="exp-summary">No experiment run yet.</div>
-
-      <div id="expViz" class="exp-viz">
-        <div id="expTimeline" class="timeline"></div>
-        <table id="expTable" class="exp-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Start (ms)</th>
-              <th>Duration (ms)</th>
-              <th>Performed Fetch</th>
-              <th>Waited</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-    <div class="panel">
-      <h3>Process Scheduling</h3>
-      <label>Algorithm:</label>
-      <select id="algoSelect">
-        <option value="fcfs">FCFS</option>
-        <option value="sjf">SJF</option>
-        <option value="rr">Round Robin</option>
-      </select>
-      <input id="quantumInput" placeholder="Quantum (for RR)" style="width:120px;">
-      <button id="runSchedBtn">Run Scheduler</button>
-
-      <pre id="schedOutput"></pre>
-      <div id="schedTimeline"></div>
+            <!-- Cache Status Section -->
+            <section class="card">
+                <h2>Cache Status</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <h4>Usage</h4>
+                        <div id="cache-usage">N/A</div>
+                        <progress id="cache-usage-bar" value="0" max="100"></progress>
+                    </div>
+                    <div class="stat-item">
+                        <h4>Hit Ratio</h4>
+                        <div id="hit-ratio">N/A</div>
+                    </div>
+                    <div class="stat-item">
+                        <h4>Items</h4>
+                        <div id="cache-items">N/A</div>
+                    </div>
+                </div>
+                <h3>Cached Items</h3>
+                <div class="table-container">
+                    <table id="cache-table">
+                        <thead>
+                            <tr>
+                                <th>URL</th>
+                                <th>Size (Bytes)</th>
+                                <th>Cached At</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cache-table-body">
+                            <!-- Data will be populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
     </div>
-    <footer>
-      <small>Auto-refresh every 2s · Backend: http://localhost:8000</small>
-    </footer>
-  </div>
 
-  <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const API_BASE_URL = 'http://127.0.0.1:8000';
+
+            // --- DOM Elements ---
+            const fetchBtn = document.getElementById('fetch-btn');
+            const urlInput = document.getElementById('url-input');
+            const fetchStatus = document.getElementById('fetch-status');
+
+            const cacheUsage = document.getElementById('cache-usage');
+            const cacheUsageBar = document.getElementById('cache-usage-bar');
+            const hitRatio = document.getElementById('hit-ratio');
+            const cacheItems = document.getElementById('cache-items');
+            const cacheTableBody = document.getElementById('cache-table-body');
+
+            // --- Scheduler DOM Elements ---
+            const addProcessBtn = document.getElementById('add-process-btn');
+            const processList = document.getElementById('process-list');
+            const runScheduleBtn = document.getElementById('run-schedule-btn');
+            const quantumContainer = document.getElementById('quantum-container');
+            const quantumInput = document.getElementById('quantum-input');
+            const scheduleSummary = document.getElementById('schedule-summary');
+            let ganttChart = null;
+
+            // --- Initial State ---
+            let processCounter = 0;
+
+            // ==========================================================================
+            // ### SCHEDULER LOGIC ###
+            // ==========================================================================
+
+            function createProcessInput() {
+                processCounter++;
+                const processId = `P${processCounter}`;
+                const div = document.createElement('div');
+                div.classList.add('process-entry');
+                div.innerHTML = `
+                    <label>ID: ${processId}</label>
+                    <input type="number" class="process-arrival" placeholder="Arrival Time" min="0" value="0">
+                    <input type="number" class="process-burst" placeholder="Burst Time" min="1" value="5">
+                    <button class="remove-process-btn">×</button>
+                `;
+                div.dataset.id = processId;
+                processList.appendChild(div);
+
+                div.querySelector('.remove-process-btn').addEventListener('click', () => {
+                    div.remove();
+                });
+            }
+
+            function getProcessesFromUI() {
+                const processes = [];
+                document.querySelectorAll('.process-entry').forEach(entry => {
+                    const id = entry.dataset.id;
+                    const arrival = parseInt(entry.querySelector('.process-arrival').value, 10) || 0;
+                    const burst = parseInt(entry.querySelector('.process-burst').value, 10) || 1;
+                    processes.push({ id, arrival, burst });
+                });
+                return processes;
+            }
+
+            async function runScheduler() {
+                const processes = getProcessesFromUI();
+                const algorithm = document.querySelector('input[name="algorithm"]:checked').value;
+                const quantum = parseInt(quantumInput.value, 10);
+
+                if (processes.length === 0) {
+                    alert('Please add at least one process.');
+                    return;
+                }
+
+                const payload = {
+                    algorithm,
+                    processes,
+                    quantum: algorithm === 'rr' ? quantum : undefined,
+                };
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/schedule`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Scheduling failed with status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    renderGanttChart(data.timeline, processes);
+                } catch (error) {
+                    console.error('Error running scheduler:', error);
+                    alert('Failed to run scheduler simulation. Check the console for details.');
+                }
+            }
+
+            function renderGanttChart(timeline, processes) {
+                const ctx = document.getElementById('gantt-chart').getContext('2d');
+                const processIDs = processes.map(p => p.id);
+
+                const datasets = timeline.map(item => {
+                    const processIndex = processIDs.indexOf(item.id);
+                    return {
+                        label: item.id,
+                        data: [{
+                            x: [item.start, item.end],
+                            y: item.id,
+                        }],
+                        backgroundColor: `hsl(${processIndex * 40}, 70%, 60%)`,
+                        barPercentage: 0.5,
+                    };
+                });
+
+                if (ganttChart) {
+                    ganttChart.destroy();
+                }
+
+                ganttChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: processIDs,
+                        datasets: datasets,
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                min: 0,
+                                title: {
+                                    display: true,
+                                    text: 'Time',
+                                },
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Processes',
+                                },
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false,
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.dataset.label}: [${context.raw.x[0]} - ${context.raw.x[1]}]`;
+                                    }
+                                }
+                            }
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                    }
+                });
+                
+                const waitTimes = {};
+                const turnaroundTimes = {};
+                processes.forEach(p => {
+                    const lastSegment = [...timeline].reverse().find(t => t.id === p.id);
+                    if(lastSegment) {
+                        turnaroundTimes[p.id] = lastSegment.end - p.arrival;
+                        waitTimes[p.id] = turnaroundTimes[p.id] - p.burst;
+                    }
+                });
+                const avgWait = Object.values(waitTimes).reduce((a, b) => a + b, 0) / processes.length;
+                const avgTurnaround = Object.values(turnaroundTimes).reduce((a, b) => a + b, 0) / processes.length;
+                scheduleSummary.innerHTML = `
+                    <strong>Average Wait Time:</strong> ${avgWait.toFixed(2)} | 
+                    <strong>Average Turnaround Time:</strong> ${avgTurnaround.toFixed(2)}
+                `;
+            }
+
+            document.querySelectorAll('input[name="algorithm"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    quantumContainer.classList.toggle('hidden', e.target.value !== 'rr');
+                });
+            });
+
+            // ==========================================================================
+            // ### PROXY & CACHE LOGIC ###
+            // ==========================================================================
+
+            const fetchUrl = async () => {
+                const url = urlInput.value.trim();
+                if (!url) {
+                    fetchStatus.textContent = 'Please enter a URL.';
+                    fetchStatus.className = 'status-message error';
+                    return;
+                }
+
+                fetchStatus.textContent = `Queuing request for ${url}...`;
+                fetchStatus.className = 'status-message info';
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/fetch`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url }),
+                    });
+
+                    if (response.status === 202) {
+                        fetchStatus.textContent = `Request for ${url} is queued and will be processed by the scheduler.`;
+                        fetchStatus.className = 'status-message success';
+                    } else {
+                         const data = await response.json();
+                         fetchStatus.textContent = `Error: ${data.error || 'Unknown error'}`;
+                         fetchStatus.className = 'status-message error';
+                    }
+                } catch (error) {
+                    console.error('Fetch error:', error);
+                    fetchStatus.textContent = `Error: Could not connect to the proxy server. Is it running?`;
+                    fetchStatus.className = 'status-message error';
+                }
+            };
+
+            const updateCacheStats = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/cache`);
+                    const data = await response.json();
+
+                    const stats = data.stats;
+                    const usageBytes = stats.current_usage_bytes;
+                    const capacityBytes = stats.capacity_bytes;
+                    const usagePercent = capacityBytes > 0 ? (usageBytes / capacityBytes) * 100 : 0;
+
+                    cacheUsage.textContent = `${(usageBytes / 1024 / 1024).toFixed(2)} MB / ${(capacityBytes / 1024 / 1024).toFixed(2)} MB`;
+                    cacheUsageBar.value = usagePercent;
+
+                    const totalRequests = stats.hits + stats.misses;
+                    const ratio = totalRequests > 0 ? (stats.hits / totalRequests) * 100 : 0;
+                    hitRatio.textContent = `${ratio.toFixed(1)}%`;
+                    cacheItems.textContent = stats.items;
+
+                    cacheTableBody.innerHTML = '';
+                    data.items.forEach(item => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${item.url}</td>
+                            <td>${item.size}</td>
+                            <td>${new Date(item.created_at * 1000).toLocaleTimeString()}</td>
+                        `;
+                        cacheTableBody.appendChild(row);
+                    });
+                } catch (error) {
+                    // It's normal for this to fail sometimes if the server is busy, so we don't log it loudly.
+                }
+            };
+
+            // --- Attach Event Listeners ---
+            fetchBtn.addEventListener('click', fetchUrl);
+            urlInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    fetchUrl();
+                }
+            });
+
+            addProcessBtn.addEventListener('click', createProcessInput);
+            runScheduleBtn.addEventListener('click', runScheduler);
+
+            // --- Initial Load and Polling ---
+            createProcessInput();
+            createProcessInput();
+            createProcessInput();
+            const defaultProcesses = document.querySelectorAll('.process-entry');
+            if (defaultProcesses[0]) {
+                defaultProcesses[0].querySelector('.process-arrival').value = 0;
+                defaultProcesses[0].querySelector('.process-burst').value = 8;
+            }
+            if (defaultProcesses[1]) {
+                defaultProcesses[1].querySelector('.process-arrival').value = 1;
+                defaultProcesses[1].querySelector('.process-burst').value = 4;
+            }
+            if (defaultProcesses[2]) {
+                defaultProcesses[2].querySelector('.process-arrival').value = 2;
+                defaultProcesses[2].querySelector('.process-burst').value = 5;
+            }
+
+            setInterval(updateCacheStats, 2000);
+            updateCacheStats();
+        });
+    </script>
 </body>
-
 </html>
+
