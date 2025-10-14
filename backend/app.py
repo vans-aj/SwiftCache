@@ -7,13 +7,14 @@ SwiftCache: Multithreaded Proxy Server demonstrating OS concepts
 - LRU cache & memory management
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask_cors import CORS
 import time
 import threading
 from queue import Queue, PriorityQueue
 import logging
+import os
 
 from cache.inflight_cache import InflightCache
 from proxy.handlers import handle_fetch, handle_list_cache
@@ -231,9 +232,28 @@ def admin_blocklist_remove():
     }), status
 
 # ============================================================================
+# FRONTEND ROUTING
+# ============================================================================
+
+# serve frontend static files
+FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_frontend(path):
+    # serve index.html for root or if file not found (SPA fallback)
+    if path == "" or path == "index.html":
+        return send_from_directory(FRONTEND_DIR, "index.html")
+    full = os.path.join(FRONTEND_DIR, path)
+    if os.path.isfile(full):
+        return send_from_directory(FRONTEND_DIR, path)
+    return send_from_directory(FRONTEND_DIR, "index.html")
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
 if __name__ == "__main__":
     logger.info("Starting SwiftCache server on 0.0.0.0:8000")
-    app.run(host="0.0.0.0", port=8000, debug=False, use_reloader=False, threaded=True)
+    # bind to 127.0.0.1:8000
+    app.run(host="127.0.0.1", port=8000, debug=True, use_reloader=False, threaded=True)

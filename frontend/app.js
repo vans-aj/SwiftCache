@@ -1,293 +1,116 @@
-// // frontend/app.js
-// const API_BASE = "http://localhost:8000";
-// const urlInput = document.getElementById("urlInput");
-// const fetchBtn = document.getElementById("fetchBtn");
-// const statusMsg = document.getElementById("statusMsg");
-// const statsArea = document.getElementById("statsArea");
-// const cacheTableBody = document.querySelector("#cacheTable tbody");
-// const responseMeta = document.getElementById("responseMeta");
-// const responseBody = document.getElementById("responseBody");
-// const runExpBtn = document.getElementById("runExpBtn");
-// const expUrlInput = document.getElementById("expUrl");
-// const expClientsInput = document.getElementById("expClients");
-// const expStatus = document.getElementById("expStatus");
-// const expSummary = document.getElementById("expSummary");
-// const expTableBody = document.querySelector("#expTable tbody");
+const API = 'http://127.0.0.1:8000';
+const log = [];
 
-// runExpBtn.onclick = runExperiment;
+function addLog(msg, type = 'info') {
+    const now = new Date().toLocaleTimeString();
+    const line = `[${now}] ${msg}`;
+    log.push({ msg: line, type });
+    if (log.length > 50) log.shift();
+    
+    const logArea = document.getElementById('logArea');
+    logArea.innerHTML = log.map(l => 
+        `<div class="log-line log-${l.type}">${l.msg}</div>`
+    ).join('');
+    logArea.scrollTop = logArea.scrollHeight;
+}
 
-// async function runExperiment() {
-//   let url = expUrlInput.value.trim();
-//   if (!url) return alert("Enter a URL for the experiment");
-//   if (!url.startsWith("http://") && !url.startsWith("https://")) {
-//     url = "http://" + url;
-//   }
-//   const clients = parseInt(expClientsInput.value, 10) || 5;
+async function fetchUrl() {
+    const url = document.getElementById('urlInput').value.trim();
+    if (!url) return showMsg('fetchMsg', 'error', 'Enter a URL');
+    
+    showMsg('fetchMsg', 'info', 'Queuing request...');
+    addLog(`Queuing: ${url}`, 'info');
+    
+    try {
+        const res = await fetch(`${API}/fetch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            showMsg('fetchMsg', 'success', `Request queued (${data.scheduler}) - Queue: ${data.queue_size}`);
+            addLog(`✓ Queued with ${data.scheduler}`, 'info');
+        } else {
+            showMsg('fetchMsg', 'error', data.error);
+            addLog(`✗ Error: ${data.error}`, 'error');
+        }
+    } catch (e) {
+        showMsg('fetchMsg', 'error', 'Server connection failed');
+        addLog(`✗ Connection error: ${e.message}`, 'error');
+    }
+}
 
-//   // UI state
-//   expStatus.innerText = "Running experiment...";
-//   runExpBtn.disabled = true;
-//   expTableBody.innerHTML = "";
-//   expSummary.innerText = "";
+async function changeScheduler() {
+    const algo = document.querySelector('input[name="algo"]:checked').value;
+    addLog(`Changing scheduler to ${algo.toUpperCase()}`, 'info');
+    
+    try {
+        const res = await fetch(`${API}/scheduler`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ algorithm: algo })
+        });
+        
+        const data = await res.json();
+        showMsg('schedulerMsg', 'success', data.message);
+        addLog(`✓ Scheduler changed to ${algo}`, 'info');
+    } catch (e) {
+        showMsg('schedulerMsg', 'error', 'Failed to change scheduler');
+        addLog(`✗ Scheduler change failed`, 'error');
+    }
+}
 
-//   try {
-//     const res = await fetch(`${API_BASE}/experiment`, {
-//       method: "POST",
-//       headers: {"Content-Type":"application/json"},
-//       body: JSON.stringify({ url, clients })
-//     });
+async function updateStats() {
+    try {
+        const res = await fetch(`${API}/cache`);
+        const data = await res.json();
+        const stats = data.stats;
+        
+        const usageMB = (stats.current_usage_bytes / 1024 / 1024).toFixed(2);
+        const capacityMB = (stats.capacity_bytes / 1024 / 1024).toFixed(2);
+        document.getElementById('cacheUsage').textContent = `${usageMB} / ${capacityMB} MB`;
+        
+        const total = stats.hits + stats.misses;
+        const ratio = total > 0 ? ((stats.hits / total) * 100).toFixed(1) : 0;
+        document.getElementById('hitRatio').textContent = `${ratio}%`;
+        
+        document.getElementById('itemCount').textContent = stats.items;
+        document.getElementById('inflightCount').textContent = stats.inflight_requests || 0;
+        
+        const tbody = document.getElementById('cacheTable');
+        tbody.innerHTML = data.items.map(item => `
+            <tr>
+                <td style="max-width: 400px; word-break: break-all;">${item.url}</td>
+                <td>${(item.size / 1024).toFixed(1)} KB</td>
+                <td>${new Date(item.created_at * 1000).toLocaleTimeString()}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        // Silently fail
+    }
+}
 
-//     if (!res.ok) {
-//       const txt = await res.text();
-//       let msg = txt;
-//       try { msg = JSON.parse(txt).detail || JSON.parse(txt).error || txt; } catch(e){ }
-//       expStatus.innerText = `Error: ${res.status} ${msg}`;
-//       return;
-//     }
+function showMsg(id, type, text) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = `message show ${type}`;
+}
 
-//     const j = await res.json();
-//     // Expected shape (see below). Render table + summary.
-//     renderExperimentResults(j);
+function getSchedulerInfo() {
+    fetch(`${API}/scheduler`).then(r => r.json()).then(data => {
+        document.getElementById('schedulerInfo').textContent = 
+            `Current: ${data.current_algorithm.toUpperCase()}`;
+    }).catch(() => {});
+}
 
-//   } catch (e) {
-//     expStatus.innerText = "Experiment failed: " + e.message;
-//   } finally {
-//     runExpBtn.disabled = false;
-//   }
-// }
+document.getElementById('urlInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') fetchUrl();
+});
 
-// function renderExperimentResults(data) {
-//   expStatus.innerText = "";
-//   if (!data || !data.results) {
-//     expSummary.innerText = "No results returned.";
-//     return;
-//   }
-
-//   // normalize results and compute bounds
-//   const results = data.results.slice().sort((a,b) => a.start_ms - b.start_ms);
-//   const starts = results.map(r => r.start_ms);
-//   const ends = results.map(r => (r.end_ms ?? (r.start_ms + (r.duration_ms||0))));
-//   const minStart = Math.min(...starts);
-//   const maxEnd = Math.max(...ends);
-//   const totalSpan = Math.max(1, maxEnd - minStart);
-
-//   // summary
-//   const s = data.summary || {};
-//   expSummary.innerHTML = `
-//     <b>Clients:</b> ${results.length} &nbsp;
-//     <b>Network fetches:</b> ${s.network_fetches ?? "?"} &nbsp;
-//     <b>Avg:</b> ${s.avg_latency_ms ?? "?"} ms &nbsp;
-//     <b>Max:</b> ${s.max_latency_ms ?? "?"} ms
-//   `;
-
-//   // timeline render
-//   const timeline = document.getElementById("expTimeline");
-//   timeline.innerHTML = ""; // clear
-//   results.forEach(r => {
-//     const row = document.createElement("div");
-//     row.className = "timeline-row";
-//     const label = document.createElement("div");
-//     label.className = "timeline-label";
-//     label.innerText = `#${r.id}`;
-
-//     const barWrap = document.createElement("div");
-//     barWrap.className = "timeline-bar-wrap";
-
-//     const bar = document.createElement("div");
-//     // compute left% and width% relative to minStart..maxEnd
-//     const leftPct = ((r.start_ms - minStart) / totalSpan) * 100;
-//     const widthPct = ((r.duration_ms) / totalSpan) * 100;
-//     bar.className = "timeline-bar";
-
-//     // If duration is essentially zero, force a visible tick (px width)
-//     const isTiny = (typeof r.duration_ms === "number" && r.duration_ms <= 1);
-//     if (isTiny) {
-//       // use pixel width for tiny hits so they are visible
-//       bar.classList.add("tick");
-//       bar.style.left = `${leftPct}%`;
-//       // width forced by CSS .tick (8px)
-//       bar.style.width = null;
-//     } else {
-//       // normal proportional width
-//       bar.style.left = `${leftPct}%`;
-//       bar.style.width = `${Math.max(1, widthPct)}%`; // ensure visible for very small non-zero durations
-//     }
-
-//     // choose style
-//     if (r.performed_fetch) {
-//       bar.classList.add("fetcher");
-//     } else if (r.waited) {
-//       bar.classList.add("waiter");
-//     } else {
-//       bar.classList.add("hit");
-//       if (isTiny) bar.classList.add("tick");
-//     }
-
-//     // tooltip text inside bar (optional)
-//     bar.title = `id:${r.id} start:${r.start_ms}ms dur:${r.duration_ms}ms`;
-
-//     barWrap.appendChild(bar);
-
-//     const info = document.createElement("div");
-//     info.className = "timeline-info";
-//     info.innerText = `${r.duration_ms} ms ${r.performed_fetch ? "(fetcher)" : (r.waited ? "(waited)" : "(hit)")}`;
-
-//     row.appendChild(label);
-//     row.appendChild(barWrap);
-//     row.appendChild(info);
-//     timeline.appendChild(row);
-//   });
-
-//   // table render
-//   const tbody = document.querySelector("#expTable tbody");
-//   tbody.innerHTML = "";
-//   results.forEach(r => {
-//     const tr = document.createElement("tr");
-//     if (r.performed_fetch) tr.classList.add("fetcher-row");
-//     const performed = r.performed_fetch ? "YES" : "";
-//     const waited = r.waited ? "YES" : "";
-//     tr.innerHTML = `<td>${r.id}</td><td>${r.start_ms}</td><td>${r.duration_ms}</td><td>${performed}</td><td>${waited}</td><td>${r.status || ""}</td>`;
-//     tbody.appendChild(tr);
-//   });
-// }
-
-// async function refreshCache() {
-//   try {
-//     const res = await fetch(API_BASE + "/cache");
-//     if (!res.ok) throw new Error("Failed to load cache");
-//     const j = await res.json();
-//     statsArea.innerText = JSON.stringify(j.stats, null, 2);
-//     cacheTableBody.innerHTML = "";
-//     (j.items || []).forEach(it => {
-//       const tr = document.createElement("tr");
-//       const created = new Date(it.created_at * 1000).toLocaleString();
-//       tr.innerHTML = `<td>${it.url}</td><td>${it.size}</td><td>${created}</td>`;
-//       cacheTableBody.appendChild(tr);
-//     });
-//   } catch (e) {
-//     statsArea.innerText = "Error: " + e.message;
-//   }
-// }
-
-// async function fetchUrl() {
-//   let url = urlInput.value.trim();
-//   if (!url) { alert("Enter a URL"); return; }
-
-//   // --- auto-prepend scheme if missing ---
-//   if (!url.startsWith("http://") && !url.startsWith("https://")) {
-//     url = "http://" + url;
-//   }
-//   // ---------------------------------------
-
-//   statusMsg.innerText = "Fetching...";
-//   fetchBtn.disabled = true;
-//   try {
-//     const res = await fetch(API_BASE + "/fetch", {
-//       method: "POST",
-//       headers: {"Content-Type":"application/json"},
-//       body: JSON.stringify({url})
-//     });
-//     const text = await res.text();
-//     const cacheHit = res.headers.get("X-Cache-Hit") || "0";
-//     const cached = res.headers.get("X-Cached") || "0";
-//     responseMeta.innerHTML = `<b>Status:</b> ${res.status} &nbsp; <b>X-Cache-Hit:</b> ${cacheHit} &nbsp; <b>X-Cached:</b> ${cached}`;
-//     // show first 5000 chars to avoid massive output
-//     responseBody.innerText = text.slice(0, 5000) + (text.length>5000 ? "\n\n...truncated..." : "");
-//   } catch (e) {
-//     responseMeta.innerText = "Error: " + e.message;
-//     responseBody.innerText = "";
-//   } finally {
-//     statusMsg.innerText = "";
-//     fetchBtn.disabled = false;
-//     refreshCache();
-//   }
-// }
-
-// fetchBtn.onclick = fetchUrl;
-// urlInput.addEventListener("keydown", (e) => { if (e.key === "Enter") fetchUrl(); });
-
-// // auto refresh the cache table periodically
-// setInterval(refreshCache, 2000);
-// refreshCache();
-
-// async function loadBlocklist() {
-//   const res = await fetch(`${API_BASE}/admin/blocklist`);
-//   const data = await res.json();
-//   const list = document.getElementById("blocklist");
-//   list.innerHTML = "";
-//   data.blocklist.forEach(domain => {
-//     const li = document.createElement("li");
-//     li.textContent = domain + " ";
-//     const btn = document.createElement("button");
-//     btn.textContent = "Remove";
-//     btn.onclick = () => removeFromBlocklist(domain);
-//     li.appendChild(btn);
-//     list.appendChild(li);
-//   });
-// }
-
-// // Add domain
-// async function addToBlocklist() {
-//   const domain = document.getElementById("blockDomain").value.trim();
-//   if (!domain) return alert("Please enter a domain");
-//   await fetch(`${API_BASE}/admin/blocklist`, {
-//     method: "POST",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ domain })
-//   });
-//   document.getElementById("blockDomain").value = "";
-//   loadBlocklist();
-// }
-
-// // Remove domain
-// async function removeFromBlocklist(domain) {
-//   await fetch(`${API_BASE}/admin/blocklist`, {
-//     method: "DELETE",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ domain })
-//   });
-//   loadBlocklist();
-// }
-// const runSchedBtn = document.getElementById("runSchedBtn");
-// const algoSelect = document.getElementById("algoSelect");
-// const quantumInput = document.getElementById("quantumInput");
-// const schedOutput = document.getElementById("schedOutput");
-// const schedTimeline = document.getElementById("schedTimeline");
-
-// runSchedBtn.onclick = async () => {
-//   const algo = algoSelect.value;
-//   const quantum = parseInt(quantumInput.value, 10) || 2;
-
-//   // sample processes for demo
-//   const processes = [
-//     {id: "P1", arrival: 0, burst: 5},
-//     {id: "P2", arrival: 1, burst: 3},
-//     {id: "P3", arrival: 2, burst: 8}
-//   ];
-
-//   const res = await fetch(`${API_BASE}/schedule`, {
-//     method: "POST",
-//     headers: {"Content-Type": "application/json"},
-//     body: JSON.stringify({algorithm: algo, processes, quantum})
-//   });
-//   const j = await res.json();
-//   schedOutput.innerText = JSON.stringify(j, null, 2);
-
-//   // Draw Gantt-like chart
-//   schedTimeline.innerHTML = "";
-//   const tl = j.timeline || [];
-//   tl.forEach(seg => {
-//     const div = document.createElement("div");
-//     div.style.display = "inline-block";
-//     div.style.padding = "6px 10px";
-//     div.style.marginRight = "2px";
-//     div.style.background = "#2b8fe8";
-//     div.style.color = "white";
-//     div.style.borderRadius = "4px";
-//     div.innerText = `${seg.id} [${seg.start}-${seg.end}]`;
-//     schedTimeline.appendChild(div);
-//   });
-// };
-
-// // Call on page load
-// loadBlocklist();
+addLog('SwiftCache initialized', 'info');
+getSchedulerInfo();
+setInterval(updateStats, 2000);
+setInterval(getSchedulerInfo, 5000);
+updateStats();
