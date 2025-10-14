@@ -131,4 +131,3 @@ class InflightCache:
             lru_stats["inflight_requests"] = len(self.inflight_requests)
         lru_stats["origin_fetches"] = self.origin_fetches
         return lru_stats
-

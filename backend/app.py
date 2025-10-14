@@ -1,179 +1,239 @@
 # backend/app.py
-from flask import Flask, request, jsonify, send_from_directory
+"""
+SwiftCache: Multithreaded Proxy Server demonstrating OS concepts
+- Thread pool & process management
+- Scheduling algorithms (FCFS, SJF, RR)
+- Synchronization & request coalescing
+- LRU cache & memory management
+"""
+
+from flask import Flask, request, jsonify
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask_cors import CORS
 import time
-import os
 import threading
-from queue import Queue, PriorityQueue # Make sure Queue is imported
+from queue import Queue, PriorityQueue
+import logging
 
 from cache.inflight_cache import InflightCache
 from proxy.handlers import handle_fetch, handle_list_cache
 from utils.validators import get_blocklist, add_blocklist, remove_blocklist
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(threadName)s] %(levelname)s: %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 CORS(app)
 
-# --- CACHE AND SCHEDULER SETUP ---
-CACHE_CAPACITY_BYTES = 5 * 1024 * 1024
+# ============================================================================
+# THREAD POOL & MEMORY MANAGEMENT
+# ============================================================================
+CACHE_CAPACITY_BYTES = 5 * 1024 * 1024  # 5 MB
 cache = InflightCache(capacity_bytes=CACHE_CAPACITY_BYTES)
-
-# Thread pool for workers
 executor = ThreadPoolExecutor(max_workers=8)
 
-# Request queues and state for the live scheduler
-# We use a dictionary to hold different queue types
+logger.info(f"Initialized cache with capacity: {CACHE_CAPACITY_BYTES / 1024 / 1024:.1f} MB")
+logger.info(f"Thread pool initialized with 8 worker threads")
+
+# ============================================================================
+# SCHEDULING QUEUES & STATE
+# ============================================================================
 scheduler_queues = {
     "fcfs": Queue(),
     "sjf": PriorityQueue(),
-    "rr": Queue() # RR also uses a simple FIFO queue for ready processes
+    "rr": Queue()
 }
-active_scheduler = "fcfs" # Start with FCFS by default
+active_scheduler = "fcfs"
 scheduler_lock = threading.Lock()
 
-# --- SCHEDULER DISPATCHER THREAD ---
+logger.info(f"Scheduler initialized with {len(scheduler_queues)} algorithms")
+
+# ============================================================================
+# SCHEDULING DISPATCHER (Background Thread)
+# ============================================================================
 
 def get_job_priority(url: str) -> int:
-    """Assigns a higher priority (lower number) to smaller/faster content types for SJF."""
-    if any(url.endswith(ext) for ext in ['.css', '.js', '.html', '.json']):
-        return 1  # High priority (shortest job)
-    if any(url.endswith(ext) for ext in ['.jpg', '.png', '.gif']):
-        return 2  # Medium priority
-    if any(url.endswith(ext) for ext in ['.mp4', '.zip', '.iso', '.pdf']):
-        return 3  # Low priority (longest job)
-    return 2 # Default to medium
+    """Assign priority for SJF: lower number = higher priority (shorter)."""
+    small_exts = ['.css', '.js', '.html', '.json']
+    medium_exts = ['.jpg', '.png', '.gif', '.svg']
+    large_exts = ['.mp4', '.zip', '.iso', '.pdf']
+    
+    for ext in small_exts:
+        if url.endswith(ext):
+            return 1
+    for ext in medium_exts:
+        if url.endswith(ext):
+            return 2
+    for ext in large_exts:
+        if url.endswith(ext):
+            return 3
+    return 2
 
 def scheduler_dispatcher():
     """
-    This function runs in a background thread. It pulls requests from the
-    active queue based on the current scheduling policy and dispatches them
-    to the worker thread pool.
+    Background thread that pulls requests from the active queue and dispatches
+    to the thread pool. Demonstrates OS concepts:
+    - Context switching between scheduler algorithms
+    - Work queue pattern (producer-consumer)
+    - Thread management via executor
     """
+    logger.info("Scheduler dispatcher thread started")
+    
     while True:
-        with scheduler_lock:
-            current_algo = active_scheduler
-        
-        request_queue = scheduler_queues[current_algo]
-
         try:
-            # .get() blocks until an item is available
+            with scheduler_lock:
+                current_algo = active_scheduler
+            
+            request_queue = scheduler_queues[current_algo]
+            
+            # Blocking get from appropriate queue
             if current_algo == "sjf":
                 priority, url, submission_time = request_queue.get()
-                print(f"[SCHEDULER - SJF] Dispatching job with priority {priority} for URL: {url}")
-            else: # FCFS and RR use a standard queue
+                logger.info(f"[DISPATCH {current_algo.upper()}] Priority={priority} URL={url}")
+            else:
                 url, submission_time = request_queue.get()
-                print(f"[SCHEDULER - {current_algo.upper()}] Dispatching job for URL: {url}")
-
-            # Submit the actual work to the thread pool
+                logger.info(f"[DISPATCH {current_algo.upper()}] URL={url}")
+            
+            # Submit work to thread pool
             executor.submit(handle_fetch, cache, url)
+            
         except Exception as e:
-            print(f"[SCHEDULER] Error in dispatcher loop: {e}")
-            time.sleep(1) # Prevent rapid-fire errors
+            logger.error(f"Scheduler dispatcher error: {e}")
+            time.sleep(1)
 
-# Create and start the dispatcher thread when the app starts
+# Start dispatcher as daemon thread
 dispatcher_thread = threading.Thread(target=scheduler_dispatcher, daemon=True)
 dispatcher_thread.start()
 
-
-# --- API ROUTES ---
+# ============================================================================
+# API ROUTES
+# ============================================================================
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "name": "SwiftCache"})
+    """Health check endpoint."""
+    return jsonify({
+        "status": "ok",
+        "service": "SwiftCache",
+        "version": "1.0"
+    })
 
 @app.route("/fetch", methods=["POST"])
 def fetch_route():
+    """
+    Queue a fetch request using current scheduling policy.
+    Demonstrates: queuing, scheduling, thread pool submission.
+    """
     data = request.get_json() or {}
-    url = data.get("url")
+    url = data.get("url", "").strip()
+    
     if not url:
         return jsonify({"error": "missing url"}), 400
-
+    
     with scheduler_lock:
         current_algo = active_scheduler
     
     queue_to_use = scheduler_queues[current_algo]
     submission_time = time.time()
-
+    
+    # Enqueue based on algorithm
     if current_algo == "sjf":
         priority = get_job_priority(url)
-        # PriorityQueue expects tuples to be put on it
         queue_to_use.put((priority, url, submission_time))
-    else: # FCFS and RR
+    else:
         queue_to_use.put((url, submission_time))
-
-    print(f"[API] Queued request for {url} with {current_algo.upper()} scheduler.")
-    return jsonify({"message": f"Request queued for processing with {current_algo.upper()} policy."}), 202
-
+    
+    logger.info(f"[API] Queued {url} with {current_algo.upper()}")
+    return jsonify({
+        "message": f"Request queued with {current_algo.upper()} policy",
+        "scheduler": current_algo,
+        "queue_size": queue_to_use.qsize()
+    }), 202
 
 @app.route("/cache", methods=["GET"])
 def cache_route():
+    """Get cache statistics and contents."""
     return handle_list_cache(cache)
 
-from scheduler.algorithms import fcfs, sjf, round_robin
+@app.route("/scheduler", methods=["GET"])
+def get_scheduler():
+    """Get current scheduler policy."""
+    with scheduler_lock:
+        algo = active_scheduler
+    return jsonify({
+        "current_algorithm": algo,
+        "available": list(scheduler_queues.keys())
+    })
 
-@app.route("/schedule", methods=["POST"])
-def schedule_route():
+@app.route("/scheduler", methods=["PUT"])
+def set_scheduler():
+    """Change scheduling algorithm at runtime."""
     global active_scheduler
     data = request.get_json() or {}
-    algo = data.get("algorithm", "fcfs")
-    processes = data.get("processes", [])
-
+    algo = data.get("algorithm", "").lower()
+    
     if algo not in scheduler_queues:
         return jsonify({"error": "unknown algorithm"}), 400
-
-    # This is the key part: change the live scheduling policy
+    
     with scheduler_lock:
         if active_scheduler != algo:
-            print(f"[SCHEDULER] Changing active algorithm from {active_scheduler.upper()} to {algo.upper()}")
+            logger.info(f"[SCHEDULER] Changed {active_scheduler.upper()} → {algo.upper()}")
             active_scheduler = algo
-            # Note: In a real system, you might need to handle tasks in old queues.
-            # For this project, we'll just switch, and new tasks will use the new queue.
-
-    if not processes:
-         return jsonify({"message": f"Scheduler policy changed to {algo.upper()}", "timeline": []})
-
-    # Run the simulation for the frontend visualization
-    if algo == "fcfs":
-        timeline = fcfs(processes)
-    elif algo == "sjf":
-        timeline = sjf(processes)
-    elif algo == "rr":
-        quantum = data.get("quantum", 2)
-        timeline = round_robin(processes, quantum)
     
-    return jsonify({"timeline": timeline})
+    return jsonify({
+        "message": f"Scheduler changed to {algo.upper()}",
+        "current_algorithm": algo
+    })
 
+@app.route("/admin/blocklist", methods=["GET"])
+def admin_blocklist_get():
+    """Get current blocklist."""
+    return jsonify({"blocklist": get_blocklist()})
 
-@app.route("/admin/blocklist", methods=["GET", "POST"])
-def admin_blocklist_get_post():
-    if request.method == "GET":
-        return jsonify({"blocklist": get_blocklist()})
+@app.route("/admin/blocklist", methods=["POST"])
+def admin_blocklist_add():
+    """Add domain to blocklist."""
     data = request.get_json() or {}
-    domain = data.get("domain")
+    domain = data.get("domain", "").strip()
+    
     if not domain:
         return jsonify({"error": "missing domain"}), 400
+    
     added = add_blocklist(domain)
-    return jsonify({"added": added, "domain": domain})
+    status = 201 if added else 409
+    
+    return jsonify({
+        "added": added,
+        "domain": domain,
+        "blocklist": get_blocklist()
+    }), status
 
 @app.route("/admin/blocklist", methods=["DELETE"])
-def admin_remove_block():
+def admin_blocklist_remove():
+    """Remove domain from blocklist."""
     data = request.get_json() or {}
-    domain = data.get("domain")
+    domain = data.get("domain", "").strip()
+    
     if not domain:
         return jsonify({"error": "missing domain"}), 400
+    
     removed = remove_blocklist(domain)
-    return jsonify({"removed": removed, "domain": domain})
+    status = 200 if removed else 404
+    
+    return jsonify({
+        "removed": removed,
+        "domain": domain,
+        "blocklist": get_blocklist()
+    }), status
 
-# --- STATIC FILE SERVING ---
-FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
-@app.route("/", defaults={"path": "index.html"})
-@app.route("/<path:path>")
-def serve_frontend(path):
-    return send_from_directory(FRONTEND_DIR, path)
-
+# ============================================================================
+# MAIN
+# ============================================================================
 
 if __name__ == "__main__":
-    # The fix is to add use_reloader=False to prevent Flask from creating a second process.
-    # This ensures that all requests interact with the SAME in-memory 'cache' object.
-    app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=False)
-
+    logger.info("Starting SwiftCache server on 0.0.0.0:8000")
+    app.run(host="0.0.0.0", port=8000, debug=False, use_reloader=False, threaded=True)
